@@ -4,11 +4,13 @@ use std::{
     fs::read_to_string,
 };
 use actix_web::{get, web, App, HttpServer, HttpResponse};
+use actix_web::middleware::Logger;
 use reqwest;
 use sha2::{Digest, Sha256};
 use serde_derive::Deserialize;
 use tokio::sync::Notify;
 use chrono::prelude::*;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 
 const REFRESH_HASH_IN_SECONDS: u64 = 60;
 
@@ -173,9 +175,14 @@ async fn main() -> std::io::Result<()> {
         download_and_hash_images(app_state_clone, config).await;
     });
 
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    builder.set_private_key_file("certs/key.pem", SslFiletype::PEM).unwrap();
+    builder.set_certificate_chain_file("certs/cert.pem").unwrap();
+
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(app_state.clone()))
+            .wrap(Logger::default())
             .service(get_en_hash)
             .service(get_en_p_hash)
             .service(get_es_hash)
@@ -185,7 +192,7 @@ async fn main() -> std::io::Result<()> {
             .service(get_it_hash)
             .service(get_de_hash)
         })
-        .bind("0.0.0.0:9191")?
+        .bind_openssl("0.0.0.0:9191", builder)?
         .run()
         .await
 }
