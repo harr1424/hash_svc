@@ -7,7 +7,7 @@ use chrono::prelude::*;
 use sha2::{Digest, Sha256};
 use tokio::sync::Notify;
 
-use super::config::Config;
+use crate::config::Config;
 
 const REFRESH_HASH_IN_SECONDS: u64 = 60;
 

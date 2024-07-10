@@ -8,14 +8,14 @@ pub(crate) struct Config {
 }
 
 #[derive(Debug, Deserialize)]
- pub(crate) struct Secrets {
+pub(crate) struct Secrets {
     pub(crate) en_image: String,
     pub(crate) en_image_p: String,
     pub(crate) es_image: String,
     pub(crate) es_image_p: String,
     pub(crate) fr_image: String,
-    pub(crate)po_image: String,
-    pub(crate)it_image: String,
+    pub(crate) po_image: String,
+    pub(crate) it_image: String,
     pub(crate) de_image: String,
 }
 
