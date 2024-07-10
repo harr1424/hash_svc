@@ -1,111 +1,22 @@
 use actix_web::middleware::Logger;
 use actix_web::{get, web, App, HttpResponse, HttpServer};
-use chrono::prelude::*;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use reqwest;
-use serde_derive::Deserialize;
-use sha2::{Digest, Sha256};
-use std::{
-    fs::read_to_string,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
-const REFRESH_HASH_IN_SECONDS: u64 = 60;
-
-#[derive(Debug, Deserialize)]
-struct Config {
-    secrets: Secrets,
+mod lib {
+    pub mod config;
+    pub mod hashing;
 }
 
-#[derive(Debug, Deserialize)]
-struct Secrets {
-    en_image: String,
-    en_image_p: String,
-    es_image: String,
-    es_image_p: String,
-    fr_image: String,
-    po_image: String,
-    it_image: String,
-    de_image: String,
-}
+use lib::config::Config;
+use lib::hashing::{self, AppState};
 
-struct AppState {
-    en_image_hash: Mutex<String>,
-    en_p_image_hash: Mutex<String>,
-    es_image_hash: Mutex<String>,
-    es_p_image_hash: Mutex<String>,
-    fr_image_hash: Mutex<String>,
-    po_image_hash: Mutex<String>,
-    it_image_hash: Mutex<String>,
-    de_image_hash: Mutex<String>,
-    notify: Notify,
-}
-
-impl Config {
-    fn load_from_file(filename: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let config_str = read_to_string(filename)
-            .map_err(|err| format!("Unable to read config file: {}", err))?;
-        let config: Config = toml::from_str(&config_str)
-            .map_err(|err| format!("Unable to parse config file: {}", err))?;
-        Ok(config)
-    }
-}
-
-macro_rules! download_and_hash_image {
-    ($state_mu:expr, $image:expr, $state_notify:expr) => {
-        let image_data = match reqwest::get($image).await {
-            Ok(response) => match response.bytes().await {
-                Ok(data) => data,
-                Err(e) => {
-                    let now: DateTime<Utc> = Utc::now();
-                    eprintln!("{} : Error reading response bytes: {}", now, e);
-                    continue;
-                }
-            },
-            Err(e) => {
-                let now: DateTime<Utc> = Utc::now();
-                eprintln!("{} : Error fetching image: {}", now, e);
-                continue;
-            }
-        };
-        let hash = format!("{:x}", Sha256::digest(&image_data));
-        {
-            let mut image_hash = $state_mu.lock().unwrap();
-            *image_hash = hash.clone();
-            $state_notify.notify_one();
-        }
-    };
-}
-async fn download_and_hash_images(state: Arc<AppState>, config: Config) {
-    let en_image = config.secrets.en_image.clone();
-    let en_p_image = config.secrets.en_image_p.clone();
-    let es_image = config.secrets.es_image.clone();
-    let es_p_image = config.secrets.es_image_p.clone();
-    let fr_image = config.secrets.fr_image.clone();
-    let po_image = config.secrets.po_image.clone();
-    let it_image = config.secrets.it_image.clone();
-    let de_image = config.secrets.de_image.clone();
-
-    loop {
-        download_and_hash_image!(state.en_image_hash, &en_image, state.notify);
-        download_and_hash_image!(state.en_p_image_hash, &en_p_image, state.notify);
-        download_and_hash_image!(state.es_image_hash, &es_image, state.notify);
-        download_and_hash_image!(state.es_p_image_hash, &es_p_image, state.notify);
-        download_and_hash_image!(state.fr_image_hash, &fr_image, state.notify);
-        download_and_hash_image!(state.po_image_hash, &po_image, state.notify);
-        download_and_hash_image!(state.it_image_hash, &it_image, state.notify);
-        download_and_hash_image!(state.de_image_hash, &de_image, state.notify);
-
-        tokio::time::sleep(Duration::from_secs(REFRESH_HASH_IN_SECONDS)).await;
-    }
-}
 
 macro_rules! create_hash_endpoint {
     ($state_field:ident, $route:expr) => {
         #[get($route)]
-        async fn $state_field(state: web::Data<Arc<AppState>>) -> HttpResponse {
+        async fn $state_field(state: web::Data<Arc<hashing::AppState>>) -> HttpResponse {
             let image_hash = state.$state_field.lock().unwrap();
             HttpResponse::Ok().body(image_hash.clone())
         }
@@ -144,7 +55,7 @@ async fn main() -> std::io::Result<()> {
             std::process::exit(1);
         });
 
-        download_and_hash_images(app_state_clone, config).await;
+        hashing::download_and_hash_images(app_state_clone, config).await;
     });
 
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
