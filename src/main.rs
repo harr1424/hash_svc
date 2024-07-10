@@ -1,37 +1,18 @@
 use actix_web::middleware::Logger;
-use actix_web::{get, web, App, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpServer};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Notify;
 
 mod lib {
     pub mod config;
+    pub mod endpoints;
     pub mod hashing;
 }
 
 use lib::config::Config;
+use lib::endpoints;
 use lib::hashing::{self, AppState};
-
-
-macro_rules! create_hash_endpoint {
-    ($state_field:ident, $route:expr) => {
-        #[get($route)]
-        async fn $state_field(state: web::Data<Arc<hashing::AppState>>) -> HttpResponse {
-            let image_hash = state.$state_field.lock().unwrap();
-            HttpResponse::Ok().body(image_hash.clone())
-        }
-    };
-}
-
-create_hash_endpoint!(en_image_hash, "/en");
-create_hash_endpoint!(en_p_image_hash, "/en_p");
-create_hash_endpoint!(es_image_hash, "/es");
-create_hash_endpoint!(es_p_image_hash, "/es_p");
-create_hash_endpoint!(fr_image_hash, "/fr");
-create_hash_endpoint!(po_image_hash, "/po");
-create_hash_endpoint!(it_image_hash, "/it");
-create_hash_endpoint!(de_image_hash, "/de");
-
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -70,14 +51,14 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(app_state.clone()))
             .wrap(Logger::default())
-            .service(en_image_hash)
-            .service(en_p_image_hash)
-            .service(es_image_hash)
-            .service(es_p_image_hash)
-            .service(fr_image_hash)
-            .service(po_image_hash)
-            .service(it_image_hash)
-            .service(de_image_hash)
+            .service(endpoints::en_image_hash)
+            .service(endpoints::en_p_image_hash)
+            .service(endpoints::es_image_hash)
+            .service(endpoints::es_p_image_hash)
+            .service(endpoints::fr_image_hash)
+            .service(endpoints::po_image_hash)
+            .service(endpoints::it_image_hash)
+            .service(endpoints::de_image_hash)
     })
     .bind_openssl("0.0.0.0:9191", builder)?
     .run()
