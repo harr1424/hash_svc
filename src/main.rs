@@ -1,16 +1,16 @@
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-    fs::read_to_string,
-};
-use actix_web::{get, web, App, HttpServer, HttpResponse};
 use actix_web::middleware::Logger;
-use reqwest;
-use sha2::{Digest, Sha256};
-use serde_derive::Deserialize;
-use tokio::sync::Notify;
+use actix_web::{get, web, App, HttpResponse, HttpServer};
 use chrono::prelude::*;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+use reqwest;
+use serde_derive::Deserialize;
+use sha2::{Digest, Sha256};
+use std::{
+    fs::read_to_string,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::sync::Notify;
 
 const REFRESH_HASH_IN_SECONDS: u64 = 60;
 
@@ -22,12 +22,12 @@ struct Config {
 #[derive(Debug, Deserialize)]
 struct Secrets {
     en_image: String,
-    en_image_p: String, 
-    es_image: String, 
-    es_image_p: String, 
-    fr_image: String, 
-    po_image: String, 
-    it_image: String, 
+    en_image_p: String,
+    es_image: String,
+    es_image_p: String,
+    fr_image: String,
+    po_image: String,
+    it_image: String,
     de_image: String,
 }
 
@@ -59,15 +59,15 @@ macro_rules! download_and_hash_image {
             Ok(response) => match response.bytes().await {
                 Ok(data) => data,
                 Err(e) => {
-                    let now: DateTime<Utc> = Utc::now(); 
+                    let now: DateTime<Utc> = Utc::now();
                     eprintln!("{} : Error reading response bytes: {}", now, e);
-                    continue; 
+                    continue;
                 }
             },
             Err(e) => {
-                let now: DateTime<Utc> = Utc::now(); 
+                let now: DateTime<Utc> = Utc::now();
                 eprintln!("{} : Error fetching image: {}", now, e);
-                continue; 
+                continue;
             }
         };
         let hash = format!("{:x}", Sha256::digest(&image_data));
@@ -102,53 +102,25 @@ async fn download_and_hash_images(state: Arc<AppState>, config: Config) {
     }
 }
 
-#[get("/en")]
-async fn get_en_hash(state: web::Data<Arc<AppState>>) -> HttpResponse {
-    let image_hash = state.en_image_hash.lock().unwrap();
-    HttpResponse::Ok().body(image_hash.clone())
+macro_rules! create_hash_endpoint {
+    ($state_field:ident, $route:expr) => {
+        #[get($route)]
+        async fn $state_field(state: web::Data<Arc<AppState>>) -> HttpResponse {
+            let image_hash = state.$state_field.lock().unwrap();
+            HttpResponse::Ok().body(image_hash.clone())
+        }
+    };
 }
 
-#[get("/en_p")]
-async fn get_en_p_hash(state: web::Data<Arc<AppState>>) -> HttpResponse {
-    let image_hash = state.en_p_image_hash.lock().unwrap();
-    HttpResponse::Ok().body(image_hash.clone())
-}
+create_hash_endpoint!(en_image_hash, "/en");
+create_hash_endpoint!(en_p_image_hash, "/en_p");
+create_hash_endpoint!(es_image_hash, "/es");
+create_hash_endpoint!(es_p_image_hash, "/es_p");
+create_hash_endpoint!(fr_image_hash, "/fr");
+create_hash_endpoint!(po_image_hash, "/po");
+create_hash_endpoint!(it_image_hash, "/it");
+create_hash_endpoint!(de_image_hash, "/de");
 
-#[get("/es")]
-async fn get_es_hash(state: web::Data<Arc<AppState>>) -> HttpResponse {
-    let image_hash = state.es_image_hash.lock().unwrap();
-    HttpResponse::Ok().body(image_hash.clone())
-}
-
-#[get("/es_p")]
-async fn get_es_p_hash(state: web::Data<Arc<AppState>>) -> HttpResponse {
-    let image_hash = state.es_p_image_hash.lock().unwrap();
-    HttpResponse::Ok().body(image_hash.clone())
-}
-
-#[get("/fr")]
-async fn get_fr_hash(state: web::Data<Arc<AppState>>) -> HttpResponse {
-    let image_hash = state.fr_image_hash.lock().unwrap();
-    HttpResponse::Ok().body(image_hash.clone())
-}
-
-#[get("/po")]
-async fn get_po_hash(state: web::Data<Arc<AppState>>) -> HttpResponse {
-    let image_hash = state.po_image_hash.lock().unwrap();
-    HttpResponse::Ok().body(image_hash.clone())
-}
-
-#[get("/it")]
-async fn get_it_hash(state: web::Data<Arc<AppState>>) -> HttpResponse {
-    let image_hash = state.it_image_hash.lock().unwrap();
-    HttpResponse::Ok().body(image_hash.clone())
-}
-
-#[get("/de")]
-async fn get_de_hash(state: web::Data<Arc<AppState>>) -> HttpResponse {
-    let image_hash = state.de_image_hash.lock().unwrap();
-    HttpResponse::Ok().body(image_hash.clone())
-}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -176,23 +148,27 @@ async fn main() -> std::io::Result<()> {
     });
 
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-    builder.set_private_key_file("certs/key.pem", SslFiletype::PEM).unwrap();
-    builder.set_certificate_chain_file("certs/cert.pem").unwrap();
+    builder
+        .set_private_key_file("certs/key.pem", SslFiletype::PEM)
+        .unwrap();
+    builder
+        .set_certificate_chain_file("certs/cert.pem")
+        .unwrap();
 
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(app_state.clone()))
             .wrap(Logger::default())
-            .service(get_en_hash)
-            .service(get_en_p_hash)
-            .service(get_es_hash)
-            .service(get_es_p_hash)
-            .service(get_fr_hash)
-            .service(get_po_hash)
-            .service(get_it_hash)
-            .service(get_de_hash)
-        })
-        .bind_openssl("0.0.0.0:9191", builder)?
-        .run()
-        .await
+            .service(en_image_hash)
+            .service(en_p_image_hash)
+            .service(es_image_hash)
+            .service(es_p_image_hash)
+            .service(fr_image_hash)
+            .service(po_image_hash)
+            .service(it_image_hash)
+            .service(de_image_hash)
+    })
+    .bind_openssl("0.0.0.0:9191", builder)?
+    .run()
+    .await
 }
