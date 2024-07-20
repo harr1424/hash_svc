@@ -1,12 +1,12 @@
-use std::collections::HashMap;
 use actix_web::middleware::Logger;
 use actix_web::{web, App, HttpServer, HttpResponse};
 use actix_rt::spawn;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::sync::{Arc, Mutex};
+use chrono::Duration;
 use tokio::sync::Notify;
 
-use rate_limit::{Limiter, RateLimiter};
+use rate_limit::{LimiterBuilder, RateLimiter};
 use crate::{hashing, config::Config};
 
 macro_rules! create_hash_endpoint {
@@ -44,9 +44,10 @@ pub async fn run() -> std::io::Result<()> {
 
     let app_state_clone = Arc::clone(&app_state);
 
-    let limiter = Arc::new(Mutex::new(Limiter {
-        ip_addresses: HashMap::new(),
-    }));
+    let limiter = LimiterBuilder::new()
+        .with_duration(Duration::seconds(20))
+        .with_num_requests(2)
+        .build();
 
     spawn(async move {
         let config = Config::load_from_file("Config.toml").unwrap_or_else(|e| {
