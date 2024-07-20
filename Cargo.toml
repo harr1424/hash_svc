@@ -18,4 +18,3 @@ chrono = "0.4"
 openssl = "0.10"
 openssl-sys = "0.9"
 rate_limit = { path = "rate_limit" }
-actix-service = "2.0"
