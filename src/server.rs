@@ -58,13 +58,13 @@ pub async fn run() -> std::io::Result<()> {
         hashing::download_and_hash_images(app_state_clone, config).await;
     });
 
-    // let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-    // builder
-    //     .set_private_key_file("certs/key.pem", SslFiletype::PEM)
-    //     .unwrap();
-    // builder
-    //     .set_certificate_chain_file("certs/cert.pem")
-    //     .unwrap();
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+    builder
+        .set_private_key_file("certs/key.pem", SslFiletype::PEM)
+        .unwrap();
+    builder
+        .set_certificate_chain_file("certs/cert.pem")
+        .unwrap();
 
     HttpServer::new(move || {
         App::new()
@@ -80,8 +80,8 @@ pub async fn run() -> std::io::Result<()> {
             .service(it_image_hash)
             .service(de_image_hash)
     })
-        //.bind_openssl("0.0.0.0:9191", builder)?
-        .bind(("0.0.0.0", 9191))?
+        .bind_openssl("0.0.0.0:9191", builder)?
+        //.bind(("0.0.0.0", 9191))?
         .run()
         .await
 }
